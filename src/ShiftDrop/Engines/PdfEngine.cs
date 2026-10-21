@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Docnet.Core;
+using Docnet.Core.Editors;
 using Docnet.Core.Models;
 using ImageMagick;
 using ShiftDrop.Core;

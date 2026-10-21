@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>ShiftDrop</AssemblyName>
+    <RootNamespace>ShiftDrop</RootNamespace>
+    <ApplicationIcon>Assets\app.ico</ApplicationIcon>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <PlatformTarget>x64</PlatformTarget>
+    <SelfContained>true</SelfContained>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <Version>0.1.0</Version>
+    <Product>ShiftDrop</Product>
+    <Description>Конвертер файлов: Shift + перетаскивание</Description>
+    <SatelliteResourceLanguages>ru;en</SatelliteResourceLanguages>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Картинки: JPG/PNG/WEBP/HEIC/AVIF/ICO/TIFF/BMP/GIF. Версия 13.x закреплена: в 14.x поменялись типы (int -> uint). -->
+    <PackageReference Include="Magick.NET-Q8-x64" Version="13.10.0" />
+    <!-- PDF: рендер страниц, склейка, разбиение (PDFium) -->
+    <PackageReference Include="Docnet.Core" Version="2.6.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Resource Include="Assets\app.ico" />
+  </ItemGroup>
+
+</Project>

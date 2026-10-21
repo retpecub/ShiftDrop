@@ -18,6 +18,9 @@ public sealed class ActionDef
     /// <summary>Обработка каждого файла по отдельности.</summary>
     public Func<JobContext, string, Task>? PerFile { get; init; }
 
+    /// <summary>Действию нужны все выделенные элементы (включая папки и файлы других типов) — для архивов.</summary>
+    public bool UsesAllItems { get; init; }
+
     /// <summary>Обработка всех файлов разом (склейка и т.п.).</summary>
     public Func<JobContext, IReadOnlyList<string>, Task>? Batch { get; init; }
 }

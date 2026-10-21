@@ -38,6 +38,7 @@ public sealed class RadialWindow : Window
     private readonly List<(Path path, TextBlock label)> _sectors = new();
     private List<ActionDef> _items = new();
     private IReadOnlyList<string> _files = Array.Empty<string>();
+    private IReadOnlyList<string> _all = Array.Empty<string>();
     private FileKind _kind;
     private bool _tools;
     private int _hover = -2;
@@ -160,6 +161,7 @@ public sealed class RadialWindow : Window
         HasFiles = false;
         _tools = false;
         _files = Array.Empty<string>();
+        _all = Array.Empty<string>();
         _items = new List<ActionDef>();
         _hover = -2;
         StopAnimations();
@@ -200,9 +202,10 @@ public sealed class RadialWindow : Window
         if (!HasFiles && e.Data.GetDataPresent(DataFormats.FileDrop) && e.Data.GetData(DataFormats.FileDrop) is string[] paths)
         {
             HasFiles = true;
-            var (kind, files) = FileKinds.Classify(paths);
+            var (kind, files, all) = FileKinds.Classify(paths);
             _kind = kind;
             _files = files;
+            _all = all;
             _tools = (e.KeyStates & DragDropKeyStates.ControlKey) != 0;
             Rebuild();
             AnimateIn();
@@ -238,7 +241,7 @@ public sealed class RadialWindow : Window
         {
             e.Effects = DragDropEffects.Copy; // никогда Move — исходник остаётся на месте
             var action = _items[idx];
-            var files = _files;
+            var files = action.UsesAllItems ? _all : _files;
             Disarm();
             Dispatcher.InvokeAsync(() => Jobs.Start(action, files)); // отпускаем OLE-вызов сразу
         }
@@ -274,9 +277,10 @@ public sealed class RadialWindow : Window
 
     public void ShowForClick(IReadOnlyList<string> paths, int px, int py)
     {
-        var (kind, files) = FileKinds.Classify(paths);
+        var (kind, files, all) = FileKinds.Classify(paths);
         _kind = kind;
         _files = files;
+        _all = all;
         _tools = false;
         Rebuild();
         Show();
@@ -299,7 +303,7 @@ public sealed class RadialWindow : Window
         if (idx >= 0 && idx < _items.Count)
         {
             var action = _items[idx];
-            var files = _files;
+            var files = action.UsesAllItems ? _all : _files;
             SafeClose();
             Jobs.Start(action, files);
             return;
@@ -337,7 +341,7 @@ public sealed class RadialWindow : Window
 
     private void Rebuild()
     {
-        _items = _kind == FileKind.Unknown ? new List<ActionDef>() : Menus.Get(_kind, _tools, _files);
+        _items = _kind == FileKind.Unknown ? new List<ActionDef>() : Menus.Get(_kind, _tools, _files, _all);
         _ring.Children.Clear();
         _sectors.Clear();
         _hover = -2;
@@ -393,8 +397,11 @@ public sealed class RadialWindow : Window
             return;
         }
 
-        var count = _files.Count;
-        _hubTitle.Text = count > 1 ? $"{FileKinds.Title(_kind)} ×{count}" : FileKinds.Title(_kind);
+        var count = _kind == FileKind.Other ? _all.Count : _files.Count;
+        var title = _kind == FileKind.Other && count == 1
+            ? (System.IO.Directory.Exists(_all[0]) ? "Папка" : "Файл")
+            : FileKinds.Title(_kind);
+        _hubTitle.Text = count > 1 ? $"{title} ×{count}" : title;
 
         if (_items.Count == 0)
         {

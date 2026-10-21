@@ -27,12 +27,17 @@
 | Документы (DOC, DOCX, ODT, RTF, TXT) | PDF, DOCX, ODT, RTF, TXT | — |
 | Таблицы (XLS, XLSX, ODS, CSV) | PDF, XLSX, ODS, CSV (`;`, UTF-8) | — |
 | Презентации (PPT, PPTX, ODP) | PDF, PPTX, ODP | — |
+| Архивы (ZIP, 7Z, RAR, TAR, GZ, TGZ, BZ2, XZ, CAB, ISO, ZST) | **Распаковать** в папку «Имя\\» рядом с архивом | 7Z, ZIP — упаковать заново |
+| Любые другие файлы и **папки** | **7Z**, **ZIP** — «Добавить к "Имя.7z/.zip"» | — |
+
+Пункты **7Z** и **ZIP** есть и в инструментах (Ctrl) любого типа файлов. Несколько выделенных элементов пакуются в один архив, названный по папке, где они лежат, — как в 7-Zip.
 
 ## Движки
 
 - **Картинки** — [Magick.NET](https://github.com/dlemstra/Magick.NET) (ImageMagick), встроен.
 - **PDF** — [Docnet.Core](https://github.com/GowenGit/docnet) (PDFium), встроен.
 - **Видео/аудио** — `ffmpeg.exe`. Ищется рядом с exe, в `%LOCALAPPDATA%\ShiftDrop\ffmpeg\` и в `PATH`. Если не найден — при первом использовании предложит скачать сборку [BtbN/FFmpeg-Builds](https://github.com/BtbN/FFmpeg-Builds) (~150 МБ). Для офлайн-машин просто положите `ffmpeg.exe` рядом с `ShiftDrop.exe`.
+- **Архивы** — если установлен 7-Zip, используется `7z.exe` (всё, включая RAR5 и создание .7z). Без него ZIP создаётся встроенными средствами .NET, распаковка — через [SharpCompress](https://github.com/adamhathcock/sharpcompress), а пункт 7Z не показывается.
 - **Офис** — установленный MS Office (через COM: Word/Excel/PowerPoint) или, если его нет, LibreOffice в headless-режиме (с отдельным профилем, чтобы не мешать открытому LibreOffice).
 
 ## Сборка
@@ -51,7 +56,7 @@ build.cmd
 
 Только HKCU, права администратора не нужны:
 
-- `HKCU\Software\Classes\SystemFileAssociations\.<ext>\shell\ShiftDrop` — пункт контекстного меню для поддерживаемых расширений;
+- `HKCU\Software\Classes\*\shell\ShiftDrop` и `HKCU\Software\Classes\Directory\shell\ShiftDrop` — пункт контекстного меню для файлов и папок;
 - `HKCU\Software\Microsoft\Windows\CurrentVersion\Run\ShiftDrop` — автозапуск;
 - `HKCU\Software\ShiftDrop` — флажки настроек;
 - `%LOCALAPPDATA%\ShiftDrop\` — журнал и ffmpeg.

@@ -15,6 +15,9 @@ public enum FileKind
     Document,
     Spreadsheet,
     Presentation,
+    Archive,
+    /// <summary>Прочие файлы и папки — только упаковка в архив.</summary>
+    Other,
 }
 
 public static class FileKinds
@@ -30,6 +33,7 @@ public static class FileKinds
         Add(FileKind.Document, "doc", "docx", "odt", "rtf", "txt");
         Add(FileKind.Spreadsheet, "xls", "xlsx", "ods", "csv");
         Add(FileKind.Presentation, "ppt", "pptx", "odp");
+        Add(FileKind.Archive, "zip", "7z", "rar", "tar", "gz", "tgz", "bz2", "tbz2", "xz", "txz", "cab", "iso", "zst");
     }
 
     private static void Add(FileKind kind, params string[] exts)
@@ -45,13 +49,24 @@ public static class FileKinds
         return Map.TryGetValue(PathUtil.Ext(path), out var k) ? k : FileKind.Unknown;
     }
 
-    /// <summary>Тип определяется по первому поддерживаемому файлу; берутся только файлы того же типа.</summary>
-    public static (FileKind kind, List<string> files) Classify(IEnumerable<string> paths)
+    /// <summary>
+    /// Тип — по первому поддерживаемому файлу; files — только файлы этого типа;
+    /// all — всё выделенное (файлы и папки), для упаковки в архив.
+    /// Если поддерживаемых нет, но что-то выделено — FileKind.Other.
+    /// </summary>
+    public static (FileKind kind, List<string> files, List<string> all) Classify(IEnumerable<string> paths)
     {
-        var list = paths.Where(p => !string.IsNullOrWhiteSpace(p) && File.Exists(p)).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
-        var kind = list.Select(Of).FirstOrDefault(k => k != FileKind.Unknown);
-        if (kind == FileKind.Unknown) return (FileKind.Unknown, new List<string>());
-        return (kind, list.Where(p => Of(p) == kind).ToList());
+        var all = paths
+            .Where(p => !string.IsNullOrWhiteSpace(p))
+            .Select(p => p.Length > 3 ? p.TrimEnd('\\', '/') : p)
+            .Where(p => File.Exists(p) || Directory.Exists(p))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        if (all.Count == 0) return (FileKind.Unknown, new List<string>(), all);
+
+        var kind = all.Select(Of).FirstOrDefault(k => k != FileKind.Unknown);
+        if (kind == FileKind.Unknown) return (FileKind.Other, all, all);
+        return (kind, all.Where(p => Of(p) == kind).ToList(), all);
     }
 
     public static string Title(FileKind kind) => kind switch
@@ -63,6 +78,8 @@ public static class FileKinds
         FileKind.Document => "Документ",
         FileKind.Spreadsheet => "Таблица",
         FileKind.Presentation => "Презентация",
+        FileKind.Archive => "Архив",
+        FileKind.Other => "Файлы",
         _ => "Файл",
     };
 }

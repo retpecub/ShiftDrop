@@ -13,10 +13,59 @@ public static class Menus
     private static readonly string[] VideoTargets = { "mp4", "mkv", "webm", "mov", "avi", "gif", "mp3", "wav" };
     private static readonly string[] AudioTargets = { "mp3", "wav", "flac", "ogg", "m4a", "opus" };
 
-    public static List<ActionDef> Get(FileKind kind, bool tools, IReadOnlyList<string> files)
+    public static List<ActionDef> Get(FileKind kind, bool tools, IReadOnlyList<string> files, IReadOnlyList<string> all)
     {
+        switch (kind)
+        {
+            case FileKind.Archive:
+                // Форматы: распаковать; Ctrl: упаковать заново (как «Добавить к…» в 7-Zip)
+                return tools ? ArchiveAdd(all) : new List<ActionDef> { Unpack(files) };
+            case FileKind.Other:
+                // Неизвестные файлы и папки — сразу «Добавить к архиву»
+                return tools ? new List<ActionDef>() : ArchiveAdd(all);
+        }
+
         var srcExt = files.Count > 0 ? Normalize(PathUtil.Ext(files[0])) : "";
-        return tools ? Tools(kind, files.Count) : Formats(kind, srcExt);
+        if (!tools) return Formats(kind, srcExt);
+
+        var list = Tools(kind, files.Count);
+        list.AddRange(ArchiveAdd(all));
+        return list;
+    }
+
+    private static ActionDef Unpack(IReadOnlyList<string> files) => new()
+    {
+        Label = "Распаковать",
+        Tip = files.Count == 1
+            ? $"Распаковать в \"{ArchiveEngine.BaseName(files[0])}\\\""
+            : $"Каждый архив — в свою папку ({files.Count})",
+        PerFile = ArchiveEngine.Extract,
+    };
+
+    private static List<ActionDef> ArchiveAdd(IReadOnlyList<string> all)
+    {
+        var list = new List<ActionDef>();
+        if (all.Count == 0) return list;
+        var (_, name) = ArchiveEngine.ArchiveNameFor(all);
+
+        if (ArchiveEngine.CanCreate7z)
+        {
+            list.Add(new ActionDef
+            {
+                Label = "7Z",
+                Tip = $"Добавить к \"{name}.7z\"",
+                UsesAllItems = true,
+                Batch = ArchiveEngine.AddTo7z,
+            });
+        }
+        list.Add(new ActionDef
+        {
+            Label = "ZIP",
+            Tip = $"Добавить к \"{name}.zip\"",
+            UsesAllItems = true,
+            Batch = ArchiveEngine.AddToZip,
+        });
+        return list;
     }
 
     private static string Normalize(string ext) => ext switch

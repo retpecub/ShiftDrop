@@ -13,23 +13,36 @@ internal static class ShellIntegration
 
     private static string ExePath => Environment.ProcessPath ?? throw new InvalidOperationException("ProcessPath is null");
 
-    private static string VerbKey(string ext) => $@"Software\Classes\SystemFileAssociations\.{ext}\shell\{VerbName}";
+    // Пункт на всех файлах (*) и на папках — чтобы работали архивы для чего угодно
+    private static readonly string[] VerbKeys =
+    {
+        $@"Software\Classes\*\shell\{VerbName}",
+        $@"Software\Classes\Directory\shell\{VerbName}",
+    };
+
+    // Старый вариант (v0.1): отдельный ключ на каждое расширение
+    private static string LegacyVerbKey(string ext) => $@"Software\Classes\SystemFileAssociations\.{ext}\shell\{VerbName}";
 
     // ---------- контекстное меню ----------
 
     public static bool IsContextMenuInstalled()
     {
-        using var k = Registry.CurrentUser.OpenSubKey(VerbKey("jpg") + @"\command");
-        var cmd = k?.GetValue("") as string;
-        return cmd != null && cmd.Contains(ExePath, StringComparison.OrdinalIgnoreCase);
+        foreach (var key in VerbKeys)
+        {
+            using var k = Registry.CurrentUser.OpenSubKey(key + @"\command");
+            var cmd = k?.GetValue("") as string;
+            if (cmd == null || !cmd.Contains(ExePath, StringComparison.OrdinalIgnoreCase)) return false;
+        }
+        return true;
     }
 
     public static void InstallContextMenu()
     {
+        RemoveLegacy();
         var exe = ExePath;
-        foreach (var ext in FileKinds.AllExtensions.Select(e => e.ToLowerInvariant()).Distinct())
+        foreach (var key in VerbKeys)
         {
-            using var verb = Registry.CurrentUser.CreateSubKey(VerbKey(ext));
+            using var verb = Registry.CurrentUser.CreateSubKey(key);
             verb.SetValue("MUIVerb", "Конвертировать… (ShiftDrop)");
             verb.SetValue("Icon", $"\"{exe}\",0");
             using var cmd = verb.CreateSubKey("command");
@@ -40,11 +53,20 @@ internal static class ShellIntegration
 
     public static void UninstallContextMenu()
     {
-        foreach (var ext in FileKinds.AllExtensions.Select(e => e.ToLowerInvariant()).Distinct())
+        RemoveLegacy();
+        foreach (var key in VerbKeys)
         {
-            try { Registry.CurrentUser.DeleteSubKeyTree(VerbKey(ext), false); } catch { /* ignore */ }
+            try { Registry.CurrentUser.DeleteSubKeyTree(key, false); } catch { /* ignore */ }
         }
         NotifyShell();
+    }
+
+    private static void RemoveLegacy()
+    {
+        foreach (var ext in FileKinds.AllExtensions.Select(e => e.ToLowerInvariant()).Distinct())
+        {
+            try { Registry.CurrentUser.DeleteSubKeyTree(LegacyVerbKey(ext), false); } catch { /* ignore */ }
+        }
     }
 
     private static void NotifyShell()

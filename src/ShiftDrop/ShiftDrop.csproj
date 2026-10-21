@@ -16,7 +16,7 @@
     <PlatformTarget>x64</PlatformTarget>
     <SelfContained>true</SelfContained>
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
-    <Version>0.1.0</Version>
+    <Version>0.2.0</Version>
     <Product>ShiftDrop</Product>
     <Description>Конвертер файлов: Shift + перетаскивание</Description>
     <SatelliteResourceLanguages>ru;en</SatelliteResourceLanguages>
@@ -27,6 +27,8 @@
     <PackageReference Include="Magick.NET-Q8-x64" Version="13.10.0" />
     <!-- PDF: рендер страниц, склейка, разбиение (PDFium) -->
     <PackageReference Include="Docnet.Core" Version="2.6.0" />
+    <!-- Архивы: распаковка zip/7z/rar/tar/gz без установленного 7-Zip -->
+    <PackageReference Include="SharpCompress" Version="0.38.0" />
   </ItemGroup>
 
   <ItemGroup>

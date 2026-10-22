@@ -32,11 +32,21 @@ public partial class App : Application
         _mutex = new Mutex(true, @"Local\ShiftDrop.Main." + Environment.UserName, out bool isFirst);
         if (!isFirst)
         {
-            // Уже запущен: передаём аргументы основному процессу и выходим.
-            Native.AllowSetForegroundWindow(Native.ASFW_ANY);
-            Ipc.TrySend(e.Args.Length > 0 ? e.Args : new[] { "--show" }, TimeSpan.FromSeconds(5));
-            Shutdown();
-            return;
+            bool manualStart = e.Args.Length == 0;
+            if (manualStart && ReplaceRunningInstance())
+            {
+                // Старый экземпляр закрыт — продолжаем как основной (так обновляется версия).
+                Log.Write("replaced running instance");
+            }
+            else
+            {
+                // Уже запущен: передаём аргументы основному процессу и выходим.
+                Native.AllowSetForegroundWindow(Native.ASFW_ANY);
+                if (!e.Args.Contains("--background"))
+                    Ipc.TrySend(e.Args, TimeSpan.FromSeconds(5));
+                Shutdown();
+                return;
+            }
         }
 
         DispatcherUnhandledException += (_, ex) =>
@@ -76,8 +86,50 @@ public partial class App : Application
             _tray.Visible = false;
             _tray.Dispose();
         }
+        try { _mutex?.ReleaseMutex(); } catch { /* не владеем */ }
         _mutex?.Dispose();
         base.OnExit(e);
+    }
+
+    /// <summary>
+    /// Ручной запуск exe при уже работающем ShiftDrop: закрываем старый экземпляр (возможно, старой версии)
+    /// и становимся основным. Новые версии понимают --quit; старые просто завершаем.
+    /// </summary>
+    private bool ReplaceRunningInstance()
+    {
+        try
+        {
+            Ipc.TrySend(new[] { "--quit" }, TimeSpan.FromSeconds(1.5));
+
+            var me = Environment.ProcessId;
+            var others = Process.GetProcessesByName("ShiftDrop").Where(p => p.Id != me).ToList();
+            foreach (var p in others)
+            {
+                try
+                {
+                    if (!p.WaitForExit(2500)) p.Kill();
+                    p.WaitForExit(2000);
+                }
+                catch (Exception ex)
+                {
+                    Log.Write("replace: " + ex.Message);
+                }
+            }
+
+            try
+            {
+                return _mutex!.WaitOne(TimeSpan.FromSeconds(3));
+            }
+            catch (AbandonedMutexException)
+            {
+                return true; // процесс убит — мьютекс брошен, но теперь наш
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Write("replace failed: " + ex);
+            return false;
+        }
     }
 
     // ---------------- аргументы командной строки ----------------
@@ -93,6 +145,12 @@ public partial class App : Application
             _menuDebounce ??= new DispatcherTimer(TimeSpan.FromMilliseconds(350), DispatcherPriority.Normal, (_, _) => ShowPendingMenu(), Dispatcher);
             _menuDebounce.Stop();
             _menuDebounce.Start();
+            return;
+        }
+
+        if (remote && args.Contains("--quit"))
+        {
+            Shutdown();
             return;
         }
 
@@ -171,7 +229,7 @@ public partial class App : Application
 
         var menu = new WinForms.ContextMenuStrip();
 
-        var header = new WinForms.ToolStripMenuItem("ShiftDrop — Shift + перетаскивание") { Enabled = false };
+        var header = new WinForms.ToolStripMenuItem($"ShiftDrop {Version} — Shift + перетаскивание") { Enabled = false };
         menu.Items.Add(header);
         menu.Items.Add(new WinForms.ToolStripSeparator());
 
@@ -256,6 +314,15 @@ public partial class App : Application
                 Dispatcher.InvokeAsync(() => ToastWindow.Info("ShiftDrop",
                     "Shift + перетащить файл — форматы.\nShift + Ctrl — инструменты.\nПравый клик по файлу → «Конвертировать…»."));
         };
+    }
+
+    private static string Version
+    {
+        get
+        {
+            var v = typeof(App).Assembly.GetName().Version;
+            return v == null ? "" : $"{v.Major}.{v.Minor}.{v.Build}";
+        }
     }
 
     private static bool SafeGet(Func<bool> f)

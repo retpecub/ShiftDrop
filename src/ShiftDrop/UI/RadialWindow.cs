@@ -385,8 +385,8 @@ public sealed class RadialWindow : Window
     {
         if (_kind == FileKind.Unknown)
         {
-            _hubTitle.Text = "Не поддерживается";
-            _hubHint.Text = "";
+            _hubTitle.Text = "Нет файла на диске";
+            _hubHint.Text = "Тащите из Проводника, а не из архива или браузера";
             return;
         }
 

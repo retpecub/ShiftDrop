@@ -1,8 +1,16 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using Microsoft.Win32;
 
 namespace ShiftDrop.Core;
+
+public enum ContextMenuMode
+{
+    Off = 0,
+    ConvertOnly = 1,
+    All = 2,
+}
 
 /// <summary>Пункт «Конвертировать…» в контекстном меню Проводника и автозапуск. Всё в HKCU, без прав администратора.</summary>
 internal static class ShellIntegration
@@ -13,34 +21,44 @@ internal static class ShellIntegration
 
     private static string ExePath => Environment.ProcessPath ?? throw new InvalidOperationException("ProcessPath is null");
 
-    // Пункт на всех файлах (*) и на папках — чтобы работали архивы для чего угодно
-    private static readonly string[] VerbKeys =
+    // Режим «Для всех файлов и папок»: ключи на * и на Directory
+    private static readonly string[] AllKeys =
     {
         $@"Software\Classes\*\shell\{VerbName}",
         $@"Software\Classes\Directory\shell\{VerbName}",
     };
 
-    // Старый вариант (v0.1): отдельный ключ на каждое расширение
-    private static string LegacyVerbKey(string ext) => $@"Software\Classes\SystemFileAssociations\.{ext}\shell\{VerbName}";
+    // Режим «Только для конвертации»: отдельный ключ на каждое расширение (кроме архивов)
+    private static string ExtKey(string ext) => $@"Software\Classes\SystemFileAssociations\.{ext}\shell\{VerbName}";
+
+    private static IEnumerable<string> ConvertibleExtensions =>
+        FileKinds.AllExtensions
+            .Where(e => FileKinds.Of("x." + e) != FileKind.Archive)
+            .Select(e => e.ToLowerInvariant())
+            .Distinct();
 
     // ---------- контекстное меню ----------
 
-    public static bool IsContextMenuInstalled()
+    public static ContextMenuMode GetContextMenuMode()
     {
-        foreach (var key in VerbKeys)
-        {
-            using var k = Registry.CurrentUser.OpenSubKey(key + @"\command");
-            var cmd = k?.GetValue("") as string;
-            if (cmd == null || !cmd.Contains(ExePath, StringComparison.OrdinalIgnoreCase)) return false;
-        }
-        return true;
+        using var k = Registry.CurrentUser.OpenSubKey(SettingsKey);
+        if (k?.GetValue("ContextMenuMode") is int v && Enum.IsDefined(typeof(ContextMenuMode), v))
+            return (ContextMenuMode)v;
+        // Миграция со старого флажка: был включён — ставим щадящий режим
+        return GetFlag("ContextMenu", true) ? ContextMenuMode.ConvertOnly : ContextMenuMode.Off;
     }
 
-    public static void InstallContextMenu()
+    public static void SetContextMenuMode(ContextMenuMode mode)
     {
-        RemoveLegacy();
+        RemoveAll();
         var exe = ExePath;
-        foreach (var key in VerbKeys)
+        IEnumerable<string> keys = mode switch
+        {
+            ContextMenuMode.All => AllKeys,
+            ContextMenuMode.ConvertOnly => ConvertibleExtensions.Select(ExtKey),
+            _ => Enumerable.Empty<string>(),
+        };
+        foreach (var key in keys)
         {
             using var verb = Registry.CurrentUser.CreateSubKey(key);
             verb.SetValue("MUIVerb", "Конвертировать… (ShiftDrop)");
@@ -48,24 +66,41 @@ internal static class ShellIntegration
             using var cmd = verb.CreateSubKey("command");
             cmd.SetValue("", $"\"{exe}\" --menu \"%1\"");
         }
+
+        using (var s = Registry.CurrentUser.CreateSubKey(SettingsKey))
+            s.SetValue("ContextMenuMode", (int)mode, RegistryValueKind.DWord);
         NotifyShell();
     }
 
-    public static void UninstallContextMenu()
+    /// <summary>Записи в реестре соответствуют режиму и текущему пути к exe.</summary>
+    public static bool IsContextMenuUpToDate(ContextMenuMode mode)
     {
-        RemoveLegacy();
-        foreach (var key in VerbKeys)
+        return mode switch
+        {
+            ContextMenuMode.Off => !HasVerb(AllKeys[0]) && !HasVerb(ExtKey("jpg")),
+            ContextMenuMode.All => AllKeys.All(PointsToMe) && !HasVerb(ExtKey("jpg")),
+            ContextMenuMode.ConvertOnly => PointsToMe(ExtKey("jpg")) && !HasVerb(AllKeys[0]) && !HasVerb(ExtKey("zip")),
+            _ => true,
+        };
+    }
+
+    private static bool HasVerb(string key)
+    {
+        using var k = Registry.CurrentUser.OpenSubKey(key);
+        return k != null;
+    }
+
+    private static bool PointsToMe(string key)
+    {
+        using var k = Registry.CurrentUser.OpenSubKey(key + @"\command");
+        return k?.GetValue("") is string cmd && cmd.Contains(ExePath, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static void RemoveAll()
+    {
+        foreach (var key in AllKeys.Concat(FileKinds.AllExtensions.Select(e => ExtKey(e.ToLowerInvariant())).Distinct()))
         {
             try { Registry.CurrentUser.DeleteSubKeyTree(key, false); } catch { /* ignore */ }
-        }
-        NotifyShell();
-    }
-
-    private static void RemoveLegacy()
-    {
-        foreach (var ext in FileKinds.AllExtensions.Select(e => e.ToLowerInvariant()).Distinct())
-        {
-            try { Registry.CurrentUser.DeleteSubKeyTree(LegacyVerbKey(ext), false); } catch { /* ignore */ }
         }
     }
 

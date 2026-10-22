@@ -16,7 +16,7 @@
     <PlatformTarget>x64</PlatformTarget>
     <SelfContained>true</SelfContained>
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
-    <Version>0.2.1</Version>
+    <Version>0.2.2</Version>
     <Product>ShiftDrop</Product>
     <Description>Конвертер файлов: Shift + перетаскивание</Description>
     <SatelliteResourceLanguages>ru;en</SatelliteResourceLanguages>

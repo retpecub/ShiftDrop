@@ -182,8 +182,9 @@ public partial class App : Application
             // Если exe переместили — обновим пути в реестре.
             try
             {
-                if (ShellIntegration.GetFlag("ContextMenu", true) && !ShellIntegration.IsContextMenuInstalled())
-                    ShellIntegration.InstallContextMenu();
+                var mode = ShellIntegration.GetContextMenuMode();
+                if (!ShellIntegration.IsContextMenuUpToDate(mode))
+                    ShellIntegration.SetContextMenuMode(mode);
                 if (ShellIntegration.GetFlag("Autostart", true) && !ShellIntegration.IsAutostartEnabled())
                     ShellIntegration.SetAutostart(true);
             }
@@ -196,9 +197,8 @@ public partial class App : Application
 
         try
         {
-            ShellIntegration.InstallContextMenu();
+            ShellIntegration.SetContextMenuMode(ContextMenuMode.ConvertOnly);
             ShellIntegration.SetAutostart(true);
-            ShellIntegration.SetFlag("ContextMenu", true);
             ShellIntegration.SetFlag("Autostart", true);
             ShellIntegration.SetFlag("Configured", true);
         }
@@ -241,20 +241,39 @@ public partial class App : Application
         };
         menu.Items.Add(enabled);
 
-        var ctxMenu = new WinForms.ToolStripMenuItem("Пункт в меню Проводника") { Checked = SafeGet(ShellIntegration.IsContextMenuInstalled), CheckOnClick = true };
-        ctxMenu.CheckedChanged += (_, _) =>
+        // Пункт «Конвертировать…» в Проводнике: выкл / только для конвертируемых / для всех файлов и папок
+        var ctxMenu = new WinForms.ToolStripMenuItem("Пункт в меню Проводника");
+        var modes = new (ContextMenuMode mode, string text)[]
         {
-            try
-            {
-                if (ctxMenu.Checked) ShellIntegration.InstallContextMenu();
-                else ShellIntegration.UninstallContextMenu();
-                ShellIntegration.SetFlag("ContextMenu", ctxMenu.Checked);
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show(ex.Message, "ShiftDrop");
-            }
+            (ContextMenuMode.Off, "Выключен"),
+            (ContextMenuMode.ConvertOnly, "Только картинки, видео, PDF, документы"),
+            (ContextMenuMode.All, "Для всех файлов и папок (вкл. архивы)"),
         };
+        var modeItems = new List<WinForms.ToolStripMenuItem>();
+        void RefreshModes()
+        {
+            var current = SafeGetMode();
+            for (int i = 0; i < modes.Length; i++) modeItems[i].Checked = modes[i].mode == current;
+        }
+        foreach (var (mode, text) in modes)
+        {
+            var item = new WinForms.ToolStripMenuItem(text);
+            item.Click += (_, _) =>
+            {
+                try
+                {
+                    ShellIntegration.SetContextMenuMode(mode);
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show(ex.Message, "ShiftDrop");
+                }
+                RefreshModes();
+            };
+            modeItems.Add(item);
+            ctxMenu.DropDownItems.Add(item);
+        }
+        RefreshModes();
         menu.Items.Add(ctxMenu);
 
         var autostart = new WinForms.ToolStripMenuItem("Запускать с Windows") { Checked = SafeGet(ShellIntegration.IsAutostartEnabled), CheckOnClick = true };
@@ -323,6 +342,11 @@ public partial class App : Application
             var v = typeof(App).Assembly.GetName().Version;
             return v == null ? "" : $"{v.Major}.{v.Minor}.{v.Build}";
         }
+    }
+
+    private static ContextMenuMode SafeGetMode()
+    {
+        try { return ShellIntegration.GetContextMenuMode(); } catch { return ContextMenuMode.Off; }
     }
 
     private static bool SafeGet(Func<bool> f)
